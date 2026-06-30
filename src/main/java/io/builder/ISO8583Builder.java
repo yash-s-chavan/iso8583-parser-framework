@@ -1,5 +1,7 @@
 package io.builder;
 
+import io.config.FieldConfigurationManager;
+import io.config.FieldDefinition;
 import org.json.JSONObject;
 import java.util.Iterator;
 import java.util.ArrayList;
@@ -11,7 +13,14 @@ public class ISO8583Builder {
     /**
      * Converts a mapped JSON object back into a raw ISO8583 Hex String.
      */
-    public static String buildRawString(JSONObject jsonPayload) {
+    private final FieldConfigurationManager configManager;
+
+    public ISO8583Builder(FieldConfigurationManager configManager) {
+        this.configManager = configManager;
+    }
+
+    public String buildRawString(JSONObject jsonPayload) {
+
         StringBuilder finalMessage = new StringBuilder();
 
         // 1. Get MTI (Assuming "0" or "MTI" is the key based on your samples)
@@ -23,22 +32,52 @@ public class ISO8583Builder {
         long bitmap = 0;
         List<Integer> fields = new ArrayList<>();
         for(String str: jsonPayload.keySet()){
-            int value = Integer.parseInt(str);
-            if(value != 0) {
-                fields.add(value);
-                bitmap |= (1L << (64-value));
+            try{
+                int value = Integer.parseInt(str);
+                if(value != 0) {
+                    fields.add(value);
+                    bitmap |= (1L << (64-value));
+                }
+            } catch(NumberFormatException e){
+                throw new NumberFormatException();
             }
+
         }
         Collections.sort(fields);
 
         // TODO: 3. Generate the 64-bit binary bitmap, then convert to Hex
-        System.out.println(fields);
-        String hexStr = Long.toHexString(bitmap);
+        String hexStr = String.format("%016X", bitmap);
         finalMessage.append(hexStr);
         // TODO: 4. Format and append each Data Element based on configuration rules
-        for(int field: fields){
+        for (int field : fields) {
+            String rawValue = jsonPayload.getString(String.valueOf(field));
+            FieldDefinition def = configManager.getDefinition(field);
 
+            if (def == null) {
+                throw new IllegalStateException("Missing configuration for field: " + field);
+            }
+
+            finalMessage.append(formatDataElement(rawValue, def, field));
         }
+
         return finalMessage.toString();
+    }
+
+    /**
+     * Applies FIXED, LLVAR, or LLLVAR formatting rules to a raw string.
+     */
+    private String formatDataElement(String value, FieldDefinition def, int fieldNumber) {
+        return switch (def.format().toUpperCase()) {
+            case "FIXED" -> {
+                if (value.length() != def.length()) {
+                    // TODO: Implement padding logic (spaces for alphanumeric, zeros for numeric)
+                    throw new IllegalArgumentException("Field " + fieldNumber + " length mismatch.");
+                }
+                yield value;
+            }
+            case "LLVAR" -> String.format("%02d%s", value.length(), value);
+            case "LLLVAR" -> String.format("%03d%s", value.length(), value);
+            default -> throw new IllegalArgumentException("Unknown format: " + def.format());
+        };
     }
 }
