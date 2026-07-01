@@ -24,22 +24,30 @@ public class FieldConfigurationManager {
                 throw new IllegalArgumentException("Configuration file not found: " + resourcePath);
             }
 
-            JSONObject jsonConfig = new JSONObject(new JSONTokener(is));
+            // 1. Parse the root JSON
+            JSONObject rootJson = new JSONObject(new JSONTokener(is));
 
-            for (String key : jsonConfig.keySet()) {
+            // 2. Step inside the "fields" object
+            JSONObject fieldsJson = rootJson.getJSONObject("fields");
+
+            for (String key : fieldsJson.keySet()) {
                 int fieldNumber = Integer.parseInt(key);
-                JSONObject fieldProps = jsonConfig.getJSONObject(key);
+                JSONObject fieldProps = fieldsJson.getJSONObject(key);
 
+                String name = fieldProps.getString("name");
                 String format = fieldProps.getString("format");
-                int length = fieldProps.getInt("length");
 
-                tempMap.put(fieldNumber, new FieldDefinition(format, length));
+                // 3. Intelligently grab length or max_length
+                int length = fieldProps.has("length") ?
+                        fieldProps.getInt("length") :
+                        fieldProps.getInt("max_length");
+
+                tempMap.put(fieldNumber, new FieldDefinition(name, format, length));
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to load ISO 8583 field configurations", e);
         }
 
-        // Return an unmodifiable map to ensure thread safety across builder instances
         return Collections.unmodifiableMap(tempMap);
     }
 

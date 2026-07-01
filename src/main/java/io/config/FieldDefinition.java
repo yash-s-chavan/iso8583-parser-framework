@@ -1,4 +1,4 @@
 package io.config;
 
-public record FieldDefinition(String format, int length) {
+public record FieldDefinition(String name, String format, int length) {
 }
