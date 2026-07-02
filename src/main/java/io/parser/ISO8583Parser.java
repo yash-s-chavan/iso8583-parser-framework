@@ -1,88 +1,118 @@
 package io.parser;
 
-import java.util.HashMap;
-import java.util.Map;
-import org.json.JSONObject; // Ensure dependency is added to pom.xml
+import io.config.FieldConfigurationManager;
+import io.config.FieldDefinition;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class ISO8583Parser {
 
+    private final FieldConfigurationManager configManager;
 
-    private static final Map<Integer, FieldDefinition> fieldConfig = new HashMap<>();
-
-    static {
-
-        fieldConfig.put(2, new FieldDefinition("PAN", true, 2));
-
-        fieldConfig.put(3, new FieldDefinition("ProcCode", false, 6));
+    // Inject the exact same configuration manager used by the builder
+    public ISO8583Parser(FieldConfigurationManager configManager) {
+        this.configManager = configManager;
     }
 
-    public static String parseToXmlOrJson(String rawHexMessage) {
-        JSONObject resultJson = new JSONObject();
-        String mti = rawHexMessage.substring(0, 4);
-        resultJson.put("MTI", mti);
+    /**
+     * Parses a raw ISO 8583 string into a JSON object.
+     */
+    public JSONObject parse(String rawMessage) {
+        JSONObject parsedData = new JSONObject();
+        int pointer = 0;
 
+        try {
+            // 1. Extract MTI (First 4 characters)
+            String mti = rawMessage.substring(pointer, pointer + 4);
+            parsedData.put("0", mti);
+            pointer += 4;
 
-        String hexBitmap = rawHexMessage.substring(4, 20);
-        String binaryBitmap = hexToBinary(hexBitmap);
-        resultJson.put("Bitmap", hexBitmap);
+            // 2. Extract Primary Bitmap (Next 16 hex characters)
+            String primaryBitmapHex = rawMessage.substring(pointer, pointer + 16);
+            pointer += 16;
+            // Parse unsigned long to handle high-bit flags (like Bit 1)
+            long primaryBitmap = Long.parseUnsignedLong(primaryBitmapHex, 16);
 
-        int currentIndex = 20;
-        JSONObject fieldsJson = new JSONObject();
+            List<Integer> presentFields = new ArrayList<>();
+            boolean hasSecondary = (primaryBitmap & (1L << 63)) != 0;
 
-
-        for (int i = 1; i < binaryBitmap.length(); i++) {
-            if (binaryBitmap.charAt(i) == '1') {
-                int fieldNumber = i + 1;
-                FieldDefinition def = fieldConfig.get(fieldNumber);
-
-                if (def == null) continue;
-
-                String fieldValue = "";
-                if (def.isVariable) {
-                    int varLength = Integer.parseInt(rawHexMessage.substring(currentIndex, currentIndex + def.lengthIndicatorBytes));
-                    currentIndex += def.lengthIndicatorBytes;
-                    fieldValue = rawHexMessage.substring(currentIndex, currentIndex + varLength);
-                    currentIndex += varLength;
-                } else {
-                    fieldValue = rawHexMessage.substring(currentIndex, currentIndex + def.fixedLength);
-                    currentIndex += def.fixedLength;
+            // Decode primary bitmap (Fields 1-64)
+            for (int i = 1; i <= 64; i++) {
+                if ((primaryBitmap & (1L << (64 - i))) != 0) {
+                    presentFields.add(i);
                 }
-                fieldsJson.put("DE_" + fieldNumber, fieldValue);
             }
-        }
 
-        resultJson.put("DataElements", fieldsJson);
-        return resultJson.toString(2); // Pretty-printed JSON
-    }
+            // 3. Extract Secondary Bitmap (If Bit 1 was flipped)
+            if (hasSecondary) {
+                String secondaryBitmapHex = rawMessage.substring(pointer, pointer + 16);
+                pointer += 16;
+                long secondaryBitmap = Long.parseUnsignedLong(secondaryBitmapHex, 16);
 
-    private static String hexToBinary(String hex) {
-        StringBuilder binary = new StringBuilder();
-        for (int i = 0; i < hex.length(); i++) {
-            String binString = Integer.toBinaryString(Integer.parseInt(hex.substring(i, i + 1), 16));
-            while (binString.length() < 4) {
-                binString = "0" + binString; // Pad to ensure full nibble
+                // Decode secondary bitmap (Fields 65-128)
+                for (int i = 1; i <= 64; i++) {
+                    if ((secondaryBitmap & (1L << (64 - i))) != 0) {
+                        presentFields.add(i + 64);
+                    }
+                }
+
+                // Remove Field 1 from our data element list, as it's just the bitmap flag itself
+                presentFields.remove(Integer.valueOf(1));
             }
-            binary.append(binString);
+
+            // 4. The Sliding Window: Extract Data Elements
+            for (int field : presentFields) {
+                FieldDefinition def = configManager.getDefinition(field);
+                if (def == null) {
+                    throw new IllegalStateException("Missing configuration for field: " + field);
+                }
+
+                String format = def.format().toUpperCase();
+                int maxLength = def.length();
+                String extractedValue;
+
+                switch (format) {
+                    case "FIXED" -> {
+                        extractedValue = rawMessage.substring(pointer, pointer + maxLength);
+                        pointer += maxLength;
+                    }
+                    case "LLVAR" -> {
+                        // Read 2-digit length header, then extract that many chars
+                        int lengthHeader = Integer.parseInt(rawMessage.substring(pointer, pointer + 2));
+                        pointer += 2;
+
+                        if (lengthHeader > maxLength) {
+                            throw new IllegalArgumentException("Field " + field + " declares length " + lengthHeader + " which exceeds max " + maxLength);
+                        }
+
+                        extractedValue = rawMessage.substring(pointer, pointer + lengthHeader);
+                        pointer += lengthHeader;
+                    }
+                    case "LLLVAR" -> {
+                        // Read 3-digit length header, then extract that many chars
+                        int lengthHeader = Integer.parseInt(rawMessage.substring(pointer, pointer + 3));
+                        pointer += 3;
+
+                        if (lengthHeader > maxLength) {
+                            throw new IllegalArgumentException("Field " + field + " declares length " + lengthHeader + " which exceeds max " + maxLength);
+                        }
+
+                        extractedValue = rawMessage.substring(pointer, pointer + lengthHeader);
+                        pointer += lengthHeader;
+                    }
+                    default -> throw new IllegalArgumentException("Unknown format: " + format);
+                }
+
+                parsedData.put(String.valueOf(field), extractedValue);
+            }
+
+        } catch (IndexOutOfBoundsException e) {
+            throw new IllegalArgumentException("Message parsing failed. Reached end of string prematurely at pointer index: " + pointer, e);
         }
-        return binary.toString();
+
+        return parsedData;
     }
 
-    private static class FieldDefinition {
-        String name;
-        boolean isVariable;
-        int fixedLength;
-        int lengthIndicatorBytes;
-
-        public FieldDefinition(String name, int fixedLength) {
-            this.name = name;
-            this.isVariable = false;
-            this.fixedLength = fixedLength;
-        }
-
-        public FieldDefinition(String name, boolean isVariable, int lengthIndicatorBytes) {
-            this.name = name;
-            this.isVariable = isVariable;
-            this.lengthIndicatorBytes = lengthIndicatorBytes;
-        }
-    }
 }
