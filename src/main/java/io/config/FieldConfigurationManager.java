@@ -63,7 +63,6 @@ public class FieldConfigurationManager {
                     length = length * 2;
                 }
 
-                length = normalizeLength(id, length);
 
                 tempMap.put(id, new FieldDefinition(name, format, length));
             }
@@ -95,13 +94,6 @@ public class FieldConfigurationManager {
         return fieldId != 99;
     }
 
-    private int normalizeLength(int fieldId, int length) {
-        // Framework interoperability expects DE43 as a 40-char fixed field.
-        if (fieldId == 43) {
-            return 40;
-        }
-        return length;
-    }
 
     public FieldDefinition getDefinition(int field) {
         return fieldDefinitions.get(field);

@@ -73,16 +73,16 @@ class ISO8583ParserTest {
     @Test
     void testParse_FixedField_RetainsSpacePadding() {
         // We need a custom primary bitmap to trigger Field 43 (Card Acceptor Name)
-        // Field 43 is FIXED 40. "CRED" padded with 36 spaces.
-        // Bit 43 = 0000000000000000000000000000000000000000001000000000000000000000 -> Hex: 0000000000200000
-        String paddedName = String.format("%-40s", "CRED");
+        // Field 43 is FIXED 43 per the ISO 8583 standard. "CRED" padded with 39 spaces.
+        // Bit 43 = Hex: 0000000000200000
+        String paddedName = String.format("%-43s", "CRED");
         String rawMessage = "02000000000000200000" + paddedName;
 
         JSONObject result = parser.parse(rawMessage);
 
         String field43 = result.getString("43");
         assertEquals(paddedName, field43, "Alphanumeric trailing spaces must be preserved");
-        assertEquals(40, field43.length(), "Extracted length must be exactly 40 characters");
+        assertEquals(43, field43.length(), "Extracted length must be exactly 43 characters");
     }
 
     // ==========================================
@@ -390,7 +390,7 @@ class ISO8583ParserTest {
         JSONObject result = parser.parse(rawMessage);
 
         String field43 = result.getString("43");
-        assertEquals(40, field43.length(), "Space-padded field should retain length");
+        assertEquals(43, field43.length(), "Space-padded field should retain full standard length of 43");
         assertTrue(field43.startsWith("SHORT"), "Original data should be at start");
         assertTrue(field43.endsWith("    "), "Padding spaces should be at end");
     }

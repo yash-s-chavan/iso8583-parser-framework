@@ -134,7 +134,8 @@ class ISO8583BuilderTest {
         payload.put("43", "CRED");
 
         String result = builder.buildRawString(payload);
-        String expectedPadding = String.format("%-40s", "CRED");
+        // Field 43 is FIXED 43 per the ISO 8583 standard
+        String expectedPadding = String.format("%-43s", "CRED");
         assertTrue(result.endsWith(expectedPadding));
     }
 
@@ -378,9 +379,8 @@ class ISO8583BuilderTest {
 
         String parsedField43 = parsed.getString("43");
 
-        // After round-trip, the field should be padded to 40 chars
-        assertEquals(40, parsedField43.length(), "Field 43 should be exactly 40 chars after round-trip");
-        // Original data should be preserved (possibly with trailing spaces)
+        // Field 43 is FIXED 43 per the ISO 8583 standard
+        assertEquals(43, parsedField43.length(), "Field 43 should be exactly 43 chars after round-trip");
         assertTrue(parsedField43.startsWith("MERCHANT NAME"), "Original data should be preserved");
     }
 
