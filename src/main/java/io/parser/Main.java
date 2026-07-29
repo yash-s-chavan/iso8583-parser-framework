@@ -2,11 +2,13 @@ package io.parser;
 
 import io.config.FieldConfigurationManager;
 import io.reader.BinaryMessageReader;
-import org.json.JSONObject;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * CLI entry point: parse an ISO 8583 binary (.bin) file and print
@@ -19,10 +21,11 @@ import java.util.List;
  *   --dump   Print a hex dump of the file before parsing (useful for debugging)
  */
 public class Main {
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
         if (args.length < 1) {
-            System.err.println("Usage: java -cp <jar> io.parser.Main <path-to-file.bin> [--dump]");
+            logger.error("Usage: java -cp <jar> io.parser.Main <path-to-file.bin> [--dump]");
             System.exit(1);
         }
 
@@ -30,7 +33,7 @@ public class Main {
         boolean hexDump = args.length > 1 && args[1].equalsIgnoreCase("--dump");
 
         if (!Files.exists(filePath)) {
-            System.err.println("File not found: " + filePath.toAbsolutePath());
+            logger.error("File not found: {}", filePath.toAbsolutePath());
             System.exit(1);
         }
 
@@ -49,26 +52,43 @@ public class Main {
             ISO8583Parser parser = new ISO8583Parser(configManager);
 
             // 3. Parse each message and print JSON
-            System.out.println("===========================================");
-            System.out.println("Parsed " + rawMessages.size() + " message(s) from: " + filePath.getFileName());
-            System.out.println("===========================================\n");
+            logger.info("===========================================");
+            logger.info("Parsed {} message(s) from: {}", rawMessages.size(), filePath.getFileName());
+            logger.info("===========================================");
 
             for (int i = 0; i < rawMessages.size(); i++) {
-                System.out.println("--- Message " + (i + 1) + " ---");
-                System.out.println("Raw (hex): " + rawMessages.get(i).substring(0, Math.min(60, rawMessages.get(i).length())) + "...");
+                logger.info("--- Message {} ---", i + 1);
+                logger.info("Raw (hex): {}...", rawMessages.get(i).substring(0, Math.min(60, rawMessages.get(i).length())));
                 try {
-                    JSONObject parsed = parser.parse(rawMessages.get(i));
-                    System.out.println("Parsed JSON:\n" + parsed.toString(2));
+                    Map<String, String> parsed = parser.parse(rawMessages.get(i));
+                    logger.info("Parsed JSON:\n{}", toSortedJson(parsed));
                 } catch (Exception e) {
-                    System.err.println("Failed to parse message " + (i + 1) + ": " + e.getMessage());
+                    logger.error("Failed to parse message {}: {}", i + 1, e.getMessage());
                 }
-                System.out.println();
             }
 
         } catch (Exception e) {
-            System.err.println("Error: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Error: ", e);
             System.exit(1);
         }
+    }
+
+    /**
+     * Serializes a field map to a pretty-printed JSON string, preserving the map's iteration order.
+     * This avoids JSONObject which internally uses a HashMap and would scramble the field order.
+     */
+    private static String toSortedJson(Map<String, String> fields) {
+        StringBuilder sb = new StringBuilder("{\n");
+        int count = 0;
+        int total = fields.size();
+        for (Map.Entry<String, String> entry : fields.entrySet()) {
+            sb.append("  \"").append(entry.getKey()).append("\": \"")
+              .append(entry.getValue().replace("\\", "\\\\").replace("\"", "\\\""))
+              .append("\"");
+            if (++count < total) sb.append(",");
+            sb.append("\n");
+        }
+        sb.append("}");
+        return sb.toString();
     }
 }

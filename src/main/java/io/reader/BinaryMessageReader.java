@@ -5,8 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads a binary (.bin) ISO 8583 file and converts each message into the
@@ -27,17 +28,18 @@ import java.util.List;
  * Data elements: remaining bytes are passed through as ISO-8859-1.
  */
 public class BinaryMessageReader {
+    private static final Logger logger = LoggerFactory.getLogger(BinaryMessageReader.class);
 
     public List<String> readMessages(Path filePath) throws IOException {
         byte[] raw = Files.readAllBytes(filePath);
 
         List<String> messages = tryLengthPrefixedFormat(raw);
         if (!messages.isEmpty()) {
-            System.out.println("[BinaryMessageReader] Detected length-prefixed format. Found " + messages.size() + " message(s).");
+            logger.info("[BinaryMessageReader] Detected length-prefixed format. Found {} message(s).", messages.size());
             return messages;
         }
 
-        System.out.println("[BinaryMessageReader] No length prefix detected. Treating file as a single raw message.");
+        logger.info("[BinaryMessageReader] No length prefix detected. Treating file as a single raw message.");
         messages = new ArrayList<>();
         messages.add(convertMessageBytes(raw, 0, raw.length));
         return messages;
@@ -85,19 +87,19 @@ public class BinaryMessageReader {
             // Pass the 4 ASCII chars through directly
             sb.append(new String(raw, pos, 4, StandardCharsets.US_ASCII));
             pos += 4;
-            System.out.println("[BinaryMessageReader] MTI format: ASCII 4-byte");
+            logger.info("[BinaryMessageReader] MTI format: ASCII 4-byte");
         } else {
             // Convert 2 binary bytes to 4 uppercase hex chars
             sb.append(String.format("%02X%02X", raw[pos] & 0xFF, raw[pos + 1] & 0xFF));
             pos += 2;
-            System.out.println("[BinaryMessageReader] MTI format: Binary 2-byte");
+            logger.info("[BinaryMessageReader] MTI format: Binary 2-byte");
         }
 
         // --- Step 2: Primary bitmap (always 8 binary bytes → 16 hex chars) ---
         if (pos + 8 > end) {
             throw new IllegalArgumentException("Message truncated before primary bitmap could be read.");
         }
-        HexFormat hexFmt = HexFormat.of().withUpperCase();
+        java.util.HexFormat hexFmt = java.util.HexFormat.of().withUpperCase();
         sb.append(hexFmt.formatHex(raw, pos, pos + 8));
 
         long primaryBitmap = 0;
@@ -140,22 +142,24 @@ public class BinaryMessageReader {
     public static void hexDump(Path filePath, int maxBytes) throws IOException {
         byte[] raw = Files.readAllBytes(filePath);
         int limit = Math.min(raw.length, maxBytes);
-        System.out.println("--- HEX DUMP: " + filePath.getFileName() + " (" + raw.length + " bytes total) ---");
+        StringBuilder sb = new StringBuilder();
+        sb.append("--- HEX DUMP: ").append(filePath.getFileName()).append(" (").append(raw.length).append(" bytes total) ---\n");
         for (int i = 0; i < limit; i += 16) {
-            System.out.printf("%04X  ", i);
+            sb.append(String.format("%04X  ", i));
             for (int j = i; j < Math.min(i + 16, limit); j++) {
-                System.out.printf("%02X ", raw[j] & 0xFF);
+                sb.append(String.format("%02X ", raw[j] & 0xFF));
             }
             for (int j = Math.min(i + 16, limit); j < i + 16; j++) {
-                System.out.print("   ");
+                sb.append("   ");
             }
-            System.out.print(" |");
+            sb.append(" |");
             for (int j = i; j < Math.min(i + 16, limit); j++) {
                 char c = (char) (raw[j] & 0xFF);
-                System.out.print(c >= 32 && c < 127 ? c : '.');
+                sb.append(c >= 32 && c < 127 ? c : '.');
             }
-            System.out.println("|");
+            sb.append("|\n");
         }
-        System.out.println("---");
+        sb.append("---");
+        logger.info("\n{}", sb.toString());
     }
 }

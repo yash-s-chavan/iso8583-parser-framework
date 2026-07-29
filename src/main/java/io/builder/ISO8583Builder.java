@@ -7,6 +7,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class ISO8583Builder {
 
@@ -75,6 +76,18 @@ public class ISO8583Builder {
         }
 
         return finalMessage.toString();
+    }
+
+    /**
+     * Convenience overload: accepts the Map<String,String> returned by ISO8583Parser.parse().
+     * Converts it to a JSONObject and delegates to the standard buildRawString method.
+     */
+    public String buildRawString(Map<String, String> fieldMap) {
+        JSONObject json = new JSONObject();
+        for (Map.Entry<String, String> entry : fieldMap.entrySet()) {
+            json.put(entry.getKey(), entry.getValue());
+        }
+        return buildRawString(json);
     }
 
     private String formatDataElement(String value, FieldDefinition def, int fieldNumber) {

@@ -6,6 +6,8 @@ import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ISO8583BuilderTest {
@@ -313,14 +315,14 @@ class ISO8583BuilderTest {
 
         String rawMessage = builder.buildRawString(original);
 
-        // Parse back to JSON
-        JSONObject parsed = parser.parse(rawMessage);
+        // Parse back to Map
+        Map<String, String> parsed = parser.parse(rawMessage);
 
         // Verify data integrity
-        assertEquals(original.getString("0"), parsed.getString("0"), "MTI should match");
-        assertEquals(original.getString("2"), parsed.getString("2"), "Field 2 should match");
-        assertEquals(original.getString("3"), parsed.getString("3"), "Field 3 should match");
-        assertEquals(original.getString("4"), parsed.getString("4"), "Field 4 should match");
+        assertEquals(original.getString("0"), parsed.get("0"), "MTI should match");
+        assertEquals(original.getString("2"), parsed.get("2"), "Field 2 should match");
+        assertEquals(original.getString("3"), parsed.get("3"), "Field 3 should match");
+        assertEquals(original.getString("4"), parsed.get("4"), "Field 4 should match");
     }
 
     @Test
@@ -334,12 +336,12 @@ class ISO8583BuilderTest {
         original.put("32", "12345");
 
         String rawMessage = builder.buildRawString(original);
-        JSONObject parsed = parser.parse(rawMessage);
+        Map<String, String> parsed = parser.parse(rawMessage);
 
         // Verify all fields round-trip correctly
         for (String key : original.keySet()) {
             String originalValue = original.getString(key);
-            String parsedValue = parsed.optString(key, null);
+            String parsedValue = parsed.getOrDefault(key, null);
             assertNotNull(parsedValue, "Field " + key + " should be present after round-trip");
             assertEquals(originalValue, parsedValue, "Field " + key + " value should match after round-trip");
         }
@@ -354,11 +356,11 @@ class ISO8583BuilderTest {
 
         // First round-trip
         String iso1 = builder.buildRawString(original);
-        JSONObject parsed1 = parser.parse(iso1);
+        Map<String, String> parsed1 = parser.parse(iso1);
 
         // Second round-trip
         String iso2 = builder.buildRawString(parsed1);
-        JSONObject parsed2 = parser.parse(iso2);
+        Map<String, String> parsed2 = parser.parse(iso2);
 
         // Third round-trip
         String iso3 = builder.buildRawString(parsed2);
@@ -375,9 +377,9 @@ class ISO8583BuilderTest {
         original.put("43", "MERCHANT NAME");  // Alphanumeric, will be space-padded
 
         String rawMessage = builder.buildRawString(original);
-        JSONObject parsed = parser.parse(rawMessage);
+        Map<String, String> parsed = parser.parse(rawMessage);
 
-        String parsedField43 = parsed.getString("43");
+        String parsedField43 = parsed.get("43");
 
         // Field 43 is FIXED 43 per the ISO 8583 standard
         assertEquals(43, parsedField43.length(), "Field 43 should be exactly 43 chars after round-trip");

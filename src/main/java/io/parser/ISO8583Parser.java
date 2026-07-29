@@ -2,10 +2,13 @@ package io.parser;
 
 import io.config.FieldConfigurationManager;
 import io.config.FieldDefinition;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.Comparator;
 
 public class ISO8583Parser {
 
@@ -17,16 +20,19 @@ public class ISO8583Parser {
     }
 
     /**
-     * Parses a raw ISO 8583 string into a JSON object.
+     * Parses a raw ISO 8583 message string into a field map sorted by field number.
+     * Keys are field numbers as strings ("0", "2", "3", …); values are the extracted strings.
+     * The returned LinkedHashMap preserves numerically ascending insertion order.
      */
-    public JSONObject parse(String rawMessage) {
-        JSONObject parsedData = new JSONObject();
+    public Map<String, String> parse(String rawMessage) {
+        // TreeMap sorts keys numerically; we then transfer to LinkedHashMap to preserve that order.
+        TreeMap<String, String> sortedData = new TreeMap<>(Comparator.comparingInt(Integer::parseInt));
         int pointer = 0;
 
         try {
             // 1. Extract MTI (First 4 characters)
             String mti = rawMessage.substring(pointer, pointer + 4);
-            parsedData.put("0", mti);
+            sortedData.put("0", mti);  // field 0 = MTI
             pointer += 4;
 
             // 2. Extract Primary Bitmap (Next 16 hex characters)
@@ -105,14 +111,15 @@ public class ISO8583Parser {
                     default -> throw new IllegalArgumentException("Unknown format: " + format);
                 }
 
-                parsedData.put(String.valueOf(field), extractedValue);
+                sortedData.put(String.valueOf(field), extractedValue);  // numerically ordered by TreeMap
             }
 
         } catch (IndexOutOfBoundsException e) {
             throw new IllegalArgumentException("Message parsing failed. Reached end of string prematurely at pointer index: " + pointer, e);
         }
 
-        return parsedData;
+        // Transfer to LinkedHashMap so the caller receives a stable, insertion-ordered map.
+        return new LinkedHashMap<>(sortedData);
     }
 
 }

@@ -6,6 +6,8 @@ import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class ISO8583ParserTest {
@@ -30,12 +32,12 @@ class ISO8583ParserTest {
         // The CORRECTED 56-character string from our builder!
         String rawMessage = "02007000000000000000164000000000000000000000000000001000";
 
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("0200", result.getString("0"), "MTI should be extracted");
-        assertEquals("4000000000000000", result.getString("2"), "LLVAR Field 2 should be extracted");
-        assertEquals("000000", result.getString("3"), "FIXED Field 3 should be extracted");
-        assertEquals("000000001000", result.getString("4"), "FIXED Field 4 should be extracted");
+        assertEquals("0200", result.get("0"), "MTI should be extracted");
+        assertEquals("4000000000000000", result.get("2"), "LLVAR Field 2 should be extracted");
+        assertEquals("000000", result.get("3"), "FIXED Field 3 should be extracted");
+        assertEquals("000000001000", result.get("4"), "FIXED Field 4 should be extracted");
     }
 
     @Test
@@ -46,11 +48,11 @@ class ISO8583ParserTest {
         // Field 3 Data: 123456
         String rawMessage = "0200A0000000000000000000000000000000123456";
 
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("0200", result.getString("0"));
-        assertEquals("123456", result.getString("3"), "Field 3 should be extracted after skipping the secondary bitmap");
-        assertFalse(result.has("1"), "Field 1 (Secondary Bitmap) should not be exposed as a data element");
+        assertEquals("0200", result.get("0"));
+        assertEquals("123456", result.get("3"), "Field 3 should be extracted after skipping the secondary bitmap");
+        assertFalse(result.containsKey("1"), "Field 1 (Secondary Bitmap) should not be exposed as a data element");
     }
 
     // ==========================================
@@ -63,9 +65,9 @@ class ISO8583ParserTest {
         // Raw string has 8 leading zeroes followed by 1000.
         String rawMessage = "02001000000000000000000000001000";
 
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        String field4 = result.getString("4");
+        String field4 = result.get("4");
         assertEquals("000000001000", field4, "Numeric leading zeroes must be preserved for exact string matching");
         assertEquals(12, field4.length(), "Extracted length must exactly match dictionary length");
     }
@@ -78,9 +80,9 @@ class ISO8583ParserTest {
         String paddedName = String.format("%-43s", "CRED");
         String rawMessage = "02000000000000200000" + paddedName;
 
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        String field43 = result.getString("43");
+        String field43 = result.get("43");
         assertEquals(paddedName, field43, "Alphanumeric trailing spaces must be preserved");
         assertEquals(43, field43.length(), "Extracted length must be exactly 43 characters");
     }
@@ -96,9 +98,9 @@ class ISO8583ParserTest {
         // Data: "06" (Length header) + "123456" (Actual value)
         String rawMessage = "0200000000010000000006123456";
 
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("123456", result.getString("32"), "LLVAR should read header and extract exact character count");
+        assertEquals("123456", result.get("32"), "LLVAR should read header and extract exact character count");
     }
 
     @Test
@@ -108,9 +110,9 @@ class ISO8583ParserTest {
         // Data: "010" (Length header) + "1234567890" (Actual value)
         String rawMessage = "020000000000000000080101234567890";
 
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("1234567890", result.getString("61"), "LLLVAR should read 3-digit header and extract exact character count");
+        assertEquals("1234567890", result.get("61"), "LLLVAR should read 3-digit header and extract exact character count");
     }
 
     // ==========================================
@@ -148,9 +150,9 @@ class ISO8583ParserTest {
         payload.put("2", "A".repeat(19));
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("A".repeat(19), result.getString("2"), "Max-length LLVAR should parse correctly");
+        assertEquals("A".repeat(19), result.get("2"), "Max-length LLVAR should parse correctly");
     }
 
     @Test
@@ -161,9 +163,9 @@ class ISO8583ParserTest {
         payload.put("61", "B".repeat(999));
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("B".repeat(999), result.getString("61"), "Max-length LLLVAR should parse correctly");
+        assertEquals("B".repeat(999), result.get("61"), "Max-length LLLVAR should parse correctly");
     }
 
     @Test
@@ -173,9 +175,9 @@ class ISO8583ParserTest {
         payload.put("2", "X");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("X", result.getString("2"), "Single-character LLVAR should parse correctly");
+        assertEquals("X", result.get("2"), "Single-character LLVAR should parse correctly");
     }
 
     @Test
@@ -186,9 +188,9 @@ class ISO8583ParserTest {
         payload.put("27", "1");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("1", result.getString("27"), "Minimum-length fixed field should parse correctly");
+        assertEquals("1", result.get("27"), "Minimum-length fixed field should parse correctly");
     }
 
     @Test
@@ -201,9 +203,9 @@ class ISO8583ParserTest {
         payload.put("65", "AB");  // Binary field, 2 hex chars max
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("AB", result.getString("65"), "Secondary bitmap range field should parse correctly");
+        assertEquals("AB", result.get("65"), "Secondary bitmap range field should parse correctly");
     }
 
     // ==========================================
@@ -224,12 +226,12 @@ class ISO8583ParserTest {
         payload.put("32", "123456");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals(9, result.length(), "All 8 data fields plus MTI should be present");
-        assertEquals("0200", result.getString("0"));
-        assertEquals("1234567890123456", result.getString("2"));
-        assertEquals("123456", result.getString("3"));
+        assertEquals(9, result.size(), "All 8 data fields plus MTI should be present");
+        assertEquals("0200", result.get("0"));
+        assertEquals("1234567890123456", result.get("2"));
+        assertEquals("123456", result.get("3"));
     }
 
     @Test
@@ -240,9 +242,9 @@ class ISO8583ParserTest {
         payload.put("46", largeData);
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals(largeData, result.getString("46"), "Large 999-char LLLVAR should parse correctly");
+        assertEquals(largeData, result.get("46"), "Large 999-char LLLVAR should parse correctly");
     }
 
     @Test
@@ -255,12 +257,12 @@ class ISO8583ParserTest {
         payload.put("61", "PRIVDATA");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("PAN123", result.getString("2"), "First LLVAR should parse correctly");
-        assertEquals("ACQ123", result.getString("32"), "Second LLVAR should parse correctly");
-        assertEquals("FWD456", result.getString("33"), "Third LLVAR should parse correctly");
-        assertEquals("PRIVDATA", result.getString("61"), "LLLVAR should parse correctly");
+        assertEquals("PAN123", result.get("2"), "First LLVAR should parse correctly");
+        assertEquals("ACQ123", result.get("32"), "Second LLVAR should parse correctly");
+        assertEquals("FWD456", result.get("33"), "Third LLVAR should parse correctly");
+        assertEquals("PRIVDATA", result.get("61"), "LLLVAR should parse correctly");
     }
 
     // ==========================================
@@ -278,10 +280,10 @@ class ISO8583ParserTest {
         original.put("11", "123456");
 
         String rawMessage = builder.buildRawString(original);
-        JSONObject parsed = parser.parse(rawMessage);
+        Map<String, String> parsed = parser.parse(rawMessage);
 
         for (String key : original.keySet()) {
-            assertEquals(original.getString(key), parsed.getString(key),
+            assertEquals(original.getString(key), parsed.get(key),
                     "Field " + key + " should survive round-trip");
         }
     }
@@ -295,10 +297,10 @@ class ISO8583ParserTest {
         original.put("4", "000000002500");
 
         String iso1 = builder.buildRawString(original);
-        JSONObject parsed1 = parser.parse(iso1);
+        Map<String, String> parsed1 = parser.parse(iso1);
 
         String iso2 = builder.buildRawString(parsed1);
-        JSONObject parsed2 = parser.parse(iso2);
+        Map<String, String> parsed2 = parser.parse(iso2);
 
         String iso3 = builder.buildRawString(parsed2);
 
@@ -317,13 +319,13 @@ class ISO8583ParserTest {
         original.put("61", "PRIVDATA");         // LLLVAR
 
         String rawMessage = builder.buildRawString(original);
-        JSONObject parsed = parser.parse(rawMessage);
+        Map<String, String> parsed = parser.parse(rawMessage);
 
-        assertEquals("LLVAR123", parsed.getString("2"));
-        assertEquals("000001", parsed.getString("3"));
+        assertEquals("LLVAR123", parsed.get("2"));
+        assertEquals("000001", parsed.get("3"));
         // Field 43 is space-padded to 40 chars, so compare trimmed
-        assertEquals("MERCHANT", parsed.getString("43").trim());
-        assertEquals("PRIVDATA", parsed.getString("61"));
+        assertEquals("MERCHANT", parsed.get("43").trim());
+        assertEquals("PRIVDATA", parsed.get("61"));
     }
 
     // ==========================================
@@ -340,9 +342,9 @@ class ISO8583ParserTest {
         }
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals(10, result.length(), "All 9 fields (2-10) plus MTI should be present");
+        assertEquals(10, result.size(), "All 9 fields (2-10) plus MTI should be present");
     }
 
     @Test
@@ -356,12 +358,12 @@ class ISO8583ParserTest {
         payload.put("7", "0701121530");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("FIELD2", result.getString("2"));
-        assertEquals("000000001000", result.getString("4"));
-        assertEquals("000000000500", result.getString("6"));
-        assertEquals("0701121530", result.getString("7"));
+        assertEquals("FIELD2", result.get("2"));
+        assertEquals("000000001000", result.get("4"));
+        assertEquals("000000000500", result.get("6"));
+        assertEquals("0701121530", result.get("7"));
     }
 
     @Test
@@ -373,10 +375,10 @@ class ISO8583ParserTest {
         payload.put("7", "0000000001");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        assertEquals("000000000001", result.getString("4"), "Zero padding must be preserved");
-        assertEquals("0000000001", result.getString("7"), "Leading zeros must not be stripped");
+        assertEquals("000000000001", result.get("4"), "Zero padding must be preserved");
+        assertEquals("0000000001", result.get("7"), "Leading zeros must not be stripped");
     }
 
     @Test
@@ -387,9 +389,9 @@ class ISO8583ParserTest {
         payload.put("43", "SHORT");
 
         String rawMessage = builder.buildRawString(payload);
-        JSONObject result = parser.parse(rawMessage);
+        Map<String, String> result = parser.parse(rawMessage);
 
-        String field43 = result.getString("43");
+        String field43 = result.get("43");
         assertEquals(43, field43.length(), "Space-padded field should retain full standard length of 43");
         assertTrue(field43.startsWith("SHORT"), "Original data should be at start");
         assertTrue(field43.endsWith("    "), "Padding spaces should be at end");
