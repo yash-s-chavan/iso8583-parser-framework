@@ -27,10 +27,12 @@
 
 <div class="container">
     <h1>ISO8583 Parser framework</h1>
-    
+
     <div class="tabs">
         <div class="tab active" onclick="switchTab('hex-tab')">Raw Hex String</div>
         <div class="tab" onclick="switchTab('file-tab')">Binary File Upload (.bin)</div>
+        <!-- NEW: Builder Tab -->
+        <div class="tab" onclick="switchTab('build-tab')">Build ISO from JSON</div>
     </div>
 
     <div id="hex-tab" class="tab-content active">
@@ -47,6 +49,13 @@
         <button onclick="parseFile()">Parse Binary File</button>
     </div>
 
+    <!-- NEW: Builder Content -->
+    <div id="build-tab" class="tab-content">
+        <p>Paste your JSON payload here to build a raw ISO8583 string:</p>
+        <textarea id="jsonInput" placeholder='{&#10;  "0": "0200",&#10;  "3": "000000"&#10;}'></textarea>
+        <button onclick="buildIso()">Build Raw ISO</button>
+    </div>
+
     <div class="result-section">
         <h3>Result: <span id="statusMessage"></span></h3>
         <pre id="jsonOutput">No data yet.</pre>
@@ -57,7 +66,7 @@
     function switchTab(tabId) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        
+
         event.target.classList.add('active');
         document.getElementById(tabId).classList.add('active');
         clearOutput();
@@ -72,7 +81,7 @@
         const out = document.getElementById('jsonOutput');
         const status = document.getElementById('statusMessage');
         out.innerText = JSON.stringify(data, null, 2);
-        
+
         if (isError) {
             status.innerHTML = '<span class="error">Failed</span>';
             out.style.color = '#e74c3c';
@@ -85,7 +94,7 @@
     async function parseHex() {
         const hex = document.getElementById('hexInput').value;
         if (!hex) { alert("Please enter a hex string"); return; }
-        
+
         try {
             const response = await fetch('/api/parse/hex', {
                 method: 'POST',
@@ -102,10 +111,10 @@
     async function parseFile() {
         const fileInput = document.getElementById('fileInput');
         if (!fileInput.files.length) { alert("Please select a file"); return; }
-        
+
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
-        
+
         try {
             const response = await fetch('/api/parse/file', {
                 method: 'POST',
@@ -115,6 +124,45 @@
             displayResult(data, !response.ok);
         } catch (err) {
             displayResult({ error: err.message }, true);
+        }
+    }
+
+    // NEW: Builder Logic
+    async function buildIso() {
+        const input = document.getElementById('jsonInput').value;
+        if (!input) { alert("Please enter JSON data"); return; }
+
+        const out = document.getElementById('jsonOutput');
+        const status = document.getElementById('statusMessage');
+        out.innerText = 'Processing...';
+        status.innerText = '';
+
+        try {
+            // Validate JSON format on the frontend first
+            const jsonPayload = JSON.parse(input);
+
+            const response = await fetch('/api/iso8583/build', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jsonPayload)
+            });
+
+            // The builder returns a raw string, not a JSON object
+            const text = await response.text();
+
+            if (response.ok) {
+                out.innerText = text;
+                status.innerHTML = '<span class="success">Success!</span>';
+                out.style.color = '#ecf0f1';
+            } else {
+                displayResult({ error: text }, true);
+            }
+        } catch (err) {
+            if (err instanceof SyntaxError) {
+                displayResult({ error: "Invalid JSON format. Check your syntax." }, true);
+            } else {
+                displayResult({ error: err.message }, true);
+            }
         }
     }
 </script>
